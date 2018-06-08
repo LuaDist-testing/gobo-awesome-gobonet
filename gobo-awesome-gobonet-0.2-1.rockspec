@@ -1,16 +1,16 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "gobo-awesome-gobonet"
-version = "0.1-1"
+version = "0.2-1"
 -- LuaDist source
 source = {
-  tag = "0.1-1",
+  tag = "0.2-1",
   url = "git://github.com/LuaDist-testing/gobo-awesome-gobonet.git"
 }
 -- Original source
 -- source = {
 --    url = "git+https://github.com/gobolinux/gobo-awesome-gobonet.git",
---    tag = "0.1",
+--    tag = "0.2",
 -- }
 description = {
    summary = "A GoboNet widget for Awesome WM.",
@@ -22,6 +22,7 @@ dependencies = {}
 build = {
    type = "builtin",
    modules = {
-      ["gobo.awesome.gobonet"] = "gobo/awesome/gobonet.lua"
+      ["gobo.awesome.gobonet"] = "gobo/awesome/gobonet.lua",
+      ["gobo.awesome.gobonet.core"] = "gobo/awesome/gobonet/core.c",
    }
 }

@@ -8,8 +8,10 @@ local awful = require("awful")
 local wibox = require("wibox")
 local beautiful = require("beautiful")
 local spawn = require("awful.spawn")
+local core = require("gobo.awesome.gobonet.core")
 
 local wlan_interface
+local wired_interface
 
 local function pread(cmd)
    local pd = io.popen(cmd, "r")
@@ -81,6 +83,19 @@ function gobonet.new()
       wlan_interface = pread("gobonet interface")
    end
 
+   if not wired_interface then
+      wired_interface = pread("gobonet wired_interface")
+      -- Outdated GoboNet
+      if wired_interface:match("^GoboNet") then
+         wired_interface = nil
+      end
+      wired_interface = wired_interface:gsub("\n", "")
+      -- No wired interface
+      if wired_interface == "" then
+         wired_interface = nil
+      end
+   end
+
    if not wlan_interface then
       return widget
    end
@@ -114,7 +129,7 @@ function gobonet.new()
                done = true
             end)
          end
-         local frames = {
+         local frames = args.frames or {
             beautiful.wifi_0_icon,
             beautiful.wifi_1_icon,
             beautiful.wifi_2_icon,
@@ -126,7 +141,7 @@ function gobonet.new()
             if is_waiting() then
                widget:set_image(frames[step])
                step = step + 1
-               if step == 5 then step = 1 end
+               if step == #frames + 1 then step = 1 end
             else
                animation_timer:stop()
                if popup_menu then
@@ -152,9 +167,12 @@ function gobonet.new()
       pidfd:close()
       local statfilename = "/proc/"..pid.."/stat"
       local statfd = io.open(statfilename, "r")
-      if not statfd then return false end
+      if not statfd then
+         os.remove(pidfilename)
+         return false
+      end
       statfd:close()
-      is_scanning = animated_operation { command = "bash -c 'while [ -e \""..statfilename.."\" ]; do sleep 0.5; done; rm \""..pidfilename.."\"'" } ()
+      is_scanning = animated_operation { command = "bash -c 'while grep -q gobonet \""..statfilename.."\"; do sleep 0.5; done; rm \""..pidfilename.."\"'" } ()
       return true
    end
 
@@ -163,14 +181,37 @@ function gobonet.new()
    local function connect(essid)
       return animated_operation { command = "gobonet connect '"..essid:gsub("'", "'\\''").."'" } ()
    end
+
+   local function autoconnect()
+      return animated_operation { command = "gobonet autoconnect" } ()
+   end
+
+   local function connect_wired()
+      return animated_operation { command = "gobonet connect_wired", frames = { beautiful.wired_up_icon, beautiful.wired_down_icon } } ()
+   end
    
+   local last_update = os.time()
    local function update()
-      if is_scanning() or is_connecting() then -- or is_external_scanning() then
+      local prev_update = last_update
+      last_update = os.time()
+      if is_scanning() or is_connecting() or is_external_scanning() then
          return
+      end
+      if wired_interface then
+         local pok, up, running = pcall(core.up_and_running, wired_interface)
+         if pok and up and running then
+            widget:set_image(beautiful.wired_up_icon)
+            return
+         end
       end
       local wifi_level = read_wifi_level()
       if not wifi_level then
          widget:set_image(beautiful.wifi_down_icon)
+         -- A long time elapsed between updates probably means
+         -- the computer went asleep. Let's try to autoconnect.
+         if last_update - prev_update > 10 then
+            is_connecting = autoconnect()
+         end
       else
          local quality = (tonumber(wifi_level) / 70) * 100
          widget:set_image(quality_icon(quality))
@@ -237,6 +278,9 @@ function gobonet.new()
          is_scanning = rescan()
       else
          table.insert(entries, { " Rescan", function() is_scanning = rescan() end } )
+      end
+      if wired_interface then
+         table.insert(entries, 1, { " Wired network ("..wired_interface..") ", function() connect_wired() end, beautiful.wired_up_icon })
       end
       local len = 10
       for _, entry in ipairs(entries) do
